@@ -16,15 +16,25 @@ class RPSState extends Schema {
   @type("number") countdown: number = 0;
   @type("number") choiceTimer: number = 10;
   @type("string") matchWinnerId: string = "";
+  @type("string") matchId: string = "";
+  @type("number") wagerAmount: number = 0;
 }
 
 export class RPSRoom extends Room<RPSState> {
   maxClients = 2;
   private choiceTimeout: NodeJS.Timeout | null = null;
   private countdownInterval: NodeJS.Timeout | null = null;
+  private rounds: Array<{round: number, player1Choice: string, player2Choice: string, winnerId: string}> = [];
 
   onCreate(options: any) {
     this.setState(new RPSState());
+    
+    if (options.matchId) {
+      this.state.matchId = options.matchId;
+    }
+    if (options.wagerAmount) {
+      this.state.wagerAmount = options.wagerAmount;
+    }
 
     this.onMessage("choice", (client, choice: string) => {
       this.handleChoice(client, choice);
@@ -63,6 +73,7 @@ export class RPSRoom extends Room<RPSState> {
           if (remaining) {
             this.state.matchWinnerId = remaining[1].odisId;
             this.state.phase = "matchEnd";
+            await this.sendMatchResult();
           }
         }
         this.state.players.delete(client.sessionId);
@@ -142,8 +153,21 @@ export class RPSRoom extends Room<RPSState> {
 
     const winner = this.getWinner(p1.odisChoice, p2.odisChoice);
     
-    if (winner === "p1") p1.score++;
-    else if (winner === "p2") p2.score++;
+    let roundWinnerId = "tie";
+    if (winner === "p1") {
+      p1.score++;
+      roundWinnerId = p1.odisId;
+    } else if (winner === "p2") {
+      p2.score++;
+      roundWinnerId = p2.odisId;
+    }
+
+    this.rounds.push({
+      round: this.state.currentRound,
+      player1Choice: p1.odisChoice,
+      player2Choice: p2.odisChoice,
+      winnerId: roundWinnerId
+    });
 
     if (p1.score >= 2) {
       this.endMatch(p1.odisId);
@@ -167,9 +191,51 @@ export class RPSRoom extends Room<RPSState> {
     return wins[c1] === c2 ? "p1" : "p2";
   }
 
-  private endMatch(winnerId: string) {
+  private async endMatch(winnerId: string) {
     this.state.phase = "matchEnd";
     this.state.matchWinnerId = winnerId;
+    await this.sendMatchResult();
+  }
+
+  private async sendMatchResult() {
+    const players = Array.from(this.state.players.values());
+    const winner = players.find(p => p.odisId === this.state.matchWinnerId);
+    const loser = players.find(p => p.odisId !== this.state.matchWinnerId);
+
+    if (!winner || !loser) return;
+
+    const webhookUrl = process.env.SUPABASE_WEBHOOK_URL || 
+      "https://mudprlsqzvvooyxauxwf.supabase.co/functions/v1/colyseus-match-complete";
+
+    const payload = {
+      matchId: this.state.matchId || this.roomId,
+      matchType: "multiplayer",
+      winnerId: winner.odisId,
+      loserId: loser.odisId,
+      winnerScore: winner.score,
+      loserScore: loser.score,
+      rounds: this.rounds,
+      wagerAmount: this.state.wagerAmount || 0
+    };
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-colyseus-secret": process.env.COLYSEUS_WEBHOOK_SECRET || ""
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        console.error("Webhook failed:", await response.text());
+      } else {
+        console.log("Match result sent successfully");
+      }
+    } catch (error) {
+      console.error("Failed to send match result:", error);
+    }
   }
 
   private handleRematch(client: Client) {
@@ -181,6 +247,7 @@ export class RPSRoom extends Room<RPSState> {
       });
       this.state.currentRound = 1;
       this.state.matchWinnerId = "";
+      this.rounds = [];
       this.startCountdown();
     }
   }
