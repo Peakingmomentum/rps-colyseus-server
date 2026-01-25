@@ -49,8 +49,8 @@ class RPSRoomState extends Schema {
 
 export class RPSRoom extends Room<RPSRoomState> {
   private matchId: string = '';
-  private roundTimeout: NodeJS.Timeout | null = null;
-  private countdownInterval: NodeJS.Timeout | null = null;
+  private roundTimer: ReturnType<typeof setInterval> | null = null;
+  private countdownTimer: ReturnType<typeof setInterval> | null = null;
 
   onCreate(options: any) {
     this.setState(new RPSRoomState());
@@ -128,25 +128,38 @@ export class RPSRoom extends Room<RPSRoomState> {
     return opponent;
   }
 
+  private clearTimers() {
+    if (this.roundTimer) {
+      clearInterval(this.roundTimer);
+      this.roundTimer = null;
+    }
+    if (this.countdownTimer) {
+      clearInterval(this.countdownTimer);
+      this.countdownTimer = null;
+    }
+  }
+
   private startCountdown() {
+    this.clearTimers();
     this.state.phase = 'countdown';
     this.state.countdownTimer = 3;
     
     // Broadcast countdown updates
     this.broadcast('countdown', { value: this.state.countdownTimer });
     
-    this.countdownInterval = setInterval(() => {
+    this.countdownTimer = setInterval(() => {
       this.state.countdownTimer--;
       this.broadcast('countdown', { value: this.state.countdownTimer });
       
       if (this.state.countdownTimer <= 0) {
-        if (this.countdownInterval) clearInterval(this.countdownInterval);
+        this.clearTimers();
         this.startChoosing();
       }
     }, 1000);
   }
 
   private startChoosing() {
+    this.clearTimers();
     this.state.phase = 'choosing';
     this.state.choiceTimer = 10;
     
@@ -157,18 +170,15 @@ export class RPSRoom extends Room<RPSRoomState> {
     });
     
     // Broadcast timer updates
-    const timerInterval = setInterval(() => {
+    this.roundTimer = setInterval(() => {
       this.state.choiceTimer--;
       this.broadcast('choice_timer', { value: this.state.choiceTimer });
       
       if (this.state.choiceTimer <= 0) {
-        clearInterval(timerInterval);
+        this.clearTimers();
         this.autoSubmitChoices();
       }
     }, 1000);
-    
-    // Store for cleanup
-    this.roundTimeout = timerInterval as unknown as NodeJS.Timeout;
   }
 
   private autoSubmitChoices() {
@@ -189,9 +199,7 @@ export class RPSRoom extends Room<RPSRoomState> {
     });
     
     if (allLocked) {
-      if (this.roundTimeout) {
-        clearInterval(this.roundTimeout as unknown as NodeJS.Timer);
-      }
+      this.clearTimers();
       this.resolveRound();
     }
   }
@@ -262,8 +270,7 @@ export class RPSRoom extends Room<RPSRoomState> {
   }
 
   onDispose() {
-    if (this.roundTimeout) clearTimeout(this.roundTimeout);
-    if (this.countdownInterval) clearInterval(this.countdownInterval);
+    this.clearTimers();
   }
 }
-
+`
