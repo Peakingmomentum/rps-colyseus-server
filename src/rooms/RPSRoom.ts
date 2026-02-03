@@ -10,7 +10,7 @@
  * Make sure to also register this room in your arena.config.ts:
  * 
  *   import { RPSRoom } from './rooms/RPSRoom';
- *   gameServer.define('rps_match', RPSRoom);  // Note: 'rps_match' not 'rps_room'
+ *   gameServer.define('rps_match', RPSRoom);
  */
 
 import { Room, Client } from '@colyseus/core';
@@ -39,29 +39,35 @@ class RoundResult extends Schema {
 class RPSRoomState extends Schema {
   @type('string') phase: string = 'waiting';     // Client expects 'phase' not 'status'
   @type('number') currentRound: number = 1;
-  @type('number') maxScore: number = 4;          // First to 4 wins
+  @type('number') maxScore: number = 4;          // First to 4 wins (can be overridden)
   @type('number') countdownTimer: number = 3;    // Pre-round countdown
   @type('number') choiceTimer: number = 10;      // Time to make choice
   @type({ map: Player }) players = new MapSchema<Player>();
   @type(RoundResult) lastRoundResult: RoundResult | null = null;
   @type('string') winnerId: string = '';         // Empty string until match ends
+  @type('string') matchId: string = '';          // For tournament matching
 }
 
 export class RPSRoom extends Room<RPSRoomState> {
-  private matchId: string = '';
   private roundTimer: ReturnType<typeof setInterval> | null = null;
-  private countdownTimer: ReturnType<typeof setInterval> | null = null;
+  private countdownTimerInterval: ReturnType<typeof setInterval> | null = null;
 
   onCreate(options: any) {
     this.setState(new RPSRoomState());
-    this.matchId = options.matchId || '';
     
-    // Set room ID to matchId for deterministic pairing
-    if (this.matchId) {
-      this.roomId = this.matchId;
-    }
+    // Store matchId in state for filtering
+    this.state.matchId = options.matchId || '';
+    
+    // Set metadata so clients can find rooms by matchId
+    this.setMetadata({ matchId: this.state.matchId });
+    
+    // Set maxScore based on wager or tournament round (can be customized)
+    // Default: first to 4 for regular matches, can be overridden
+    this.state.maxScore = options.maxScore || 4;
     
     this.maxClients = 2;
+    
+    console.log(`[RPSRoom] Room created. matchId: ${this.state.matchId}, roomId: ${this.roomId}`);
     
     // Handle player choice
     this.onMessage('choice', (client, message) => {
@@ -81,7 +87,31 @@ export class RPSRoom extends Room<RPSRoomState> {
     });
   }
 
+  // Filter function for matchmaking - matches players with same matchId
+  static async onAuth(client: Client, options: any): Promise<boolean> {
+    // Always allow - authentication is handled by Supabase
+    return true;
+  }
+
+  // Use filterBy to match players by matchId
+  static async filterBy(options: any, roomId: string): Promise<boolean> {
+    // If matchId is provided, only allow joining rooms with same matchId
+    return true; // Default filter - let Colyseus handle matchmaking
+  }
+
   onJoin(client: Client, options: any) {
+    // Check if this room's matchId matches the player's matchId
+    // This ensures tournament matches pair correctly
+    if (this.state.matchId && options.matchId && this.state.matchId !== options.matchId) {
+      console.log(`[RPSRoom] Rejecting player - matchId mismatch: ${options.matchId} vs ${this.state.matchId}`);
+      throw new Error('Match ID mismatch');
+    }
+    
+    // Set matchId if not already set (first player sets it)
+    if (!this.state.matchId && options.matchId) {
+      this.state.matchId = options.matchId;
+    }
+    
     const player = new Player();
     player.odisId = client.sessionId;            // Use sessionId as odisId
     player.odUserId = options.odisId || '';      // Supabase user ID passed as odisId
@@ -90,10 +120,11 @@ export class RPSRoom extends Room<RPSRoomState> {
     
     this.state.players.set(client.sessionId, player);
     
-    console.log(`[RPSRoom] Player joined: ${player.odisName} (${client.sessionId})`);
+    console.log(`[RPSRoom] Player joined: ${player.odisName} (${client.sessionId}) to room ${this.roomId}, matchId: ${this.state.matchId}`);
     
     // Start game when 2 players join
     if (this.state.players.size === 2) {
+      this.lock(); // Prevent more players from joining
       this.startCountdown();
     }
   }
@@ -133,9 +164,9 @@ export class RPSRoom extends Room<RPSRoomState> {
       clearInterval(this.roundTimer);
       this.roundTimer = null;
     }
-    if (this.countdownTimer) {
-      clearInterval(this.countdownTimer);
-      this.countdownTimer = null;
+    if (this.countdownTimerInterval) {
+      clearInterval(this.countdownTimerInterval);
+      this.countdownTimerInterval = null;
     }
   }
 
@@ -145,11 +176,11 @@ export class RPSRoom extends Room<RPSRoomState> {
     this.state.countdownTimer = 3;
     
     // Broadcast countdown updates
-    this.broadcast('countdown', { value: this.state.countdownTimer });
+    this.broadcast('countdown', { timer: this.state.countdownTimer });
     
-    this.countdownTimer = setInterval(() => {
+    this.countdownTimerInterval = setInterval(() => {
       this.state.countdownTimer--;
-      this.broadcast('countdown', { value: this.state.countdownTimer });
+      this.broadcast('countdown', { timer: this.state.countdownTimer });
       
       if (this.state.countdownTimer <= 0) {
         this.clearTimers();
@@ -172,7 +203,7 @@ export class RPSRoom extends Room<RPSRoomState> {
     // Broadcast timer updates
     this.roundTimer = setInterval(() => {
       this.state.choiceTimer--;
-      this.broadcast('choice_timer', { value: this.state.choiceTimer });
+      this.broadcast('choice_timer', { timer: this.state.choiceTimer });
       
       if (this.state.choiceTimer <= 0) {
         this.clearTimers();
@@ -239,7 +270,7 @@ export class RPSRoom extends Room<RPSRoomState> {
       winnerId: result.winnerId || null
     });
     
-    // Check for match winner (first to 4)
+    // Check for match winner (first to maxScore)
     if (p1.score >= this.state.maxScore) {
       this.state.winnerId = p1.odUserId;
       this.state.phase = 'matchEnd';
@@ -271,6 +302,7 @@ export class RPSRoom extends Room<RPSRoomState> {
 
   onDispose() {
     this.clearTimers();
+    console.log(`[RPSRoom] Room disposed: ${this.roomId}`);
   }
 }
-`
+
