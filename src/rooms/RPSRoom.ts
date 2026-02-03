@@ -1,4 +1,4 @@
-import { Room, Client } from '@colyseus/core';
+iimport { Room, Client } from '@colyseus/core';
 import { Schema, MapSchema, type } from '@colyseus/schema';
 
 class Player extends Schema {
@@ -167,4 +167,5 @@ export class RPSRoom extends Room<RPSRoomState> {
   }
 
   onDispose() { this.clearTimers(); console.log(`[RPSRoom] Room disposed: ${this.roomId}`); }
+}
 }
