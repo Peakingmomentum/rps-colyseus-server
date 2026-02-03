@@ -8,6 +8,7 @@
     "dev": "ts-node-dev --respawn src/index.ts"
   },
   "dependencies": {
+    "@colyseus/arena": "^0.16.0",
     "@colyseus/core": "^0.16.0",
     "@colyseus/monitor": "^0.16.0",
     "@colyseus/schema": "^3.0.0",
@@ -23,3 +24,4 @@
     "node": ">=18"
   }
 }
+
