@@ -305,4 +305,3 @@ export class RPSRoom extends Room<RPSRoomState> {
     console.log(`[RPSRoom] Room disposed: ${this.roomId}`);
   }
 }
-
