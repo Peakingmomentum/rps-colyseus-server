@@ -1,0 +1,19 @@
+import Arena from "@colyseus/arena";
+import { monitor } from "@colyseus/monitor";
+import { RPSRoom } from "./rooms/RPSRoom";
+
+export default Arena({
+    getId: () => "RPS Colyseus Server",
+
+    initializeGameServer: (gameServer) => {
+        gameServer.define('rps_match', RPSRoom);
+    },
+
+    initializeExpress: (app) => {
+        app.use("/colyseus", monitor());
+    },
+
+    beforeListen: () => {
+        // Called before listen
+    }
+});
