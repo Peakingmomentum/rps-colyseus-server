@@ -289,4 +289,3 @@ export class RPSRoom extends Room<RPSRoomState> {
     this.clearTimers();
     console.log(`[RPSRoom] Room disposed: ${this.roomId}`);
   }
-}
