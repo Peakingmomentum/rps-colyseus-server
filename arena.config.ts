@@ -1,6 +1,6 @@
 import Arena from "@colyseus/tools";
 import { monitor } from "@colyseus/monitor";
-import { RPSRoom } from "./rooms/RPSRoom";
+import { RPSRoom } from "./src/rooms/RPSRoom";
 
 export default Arena({
     getId: () => "RPS Colyseus Server",
