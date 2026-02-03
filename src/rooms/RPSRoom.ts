@@ -72,17 +72,6 @@ export class RPSRoom extends Room<RPSRoomState> {
     });
   }
 
-  // Filter function for matchmaking - matches players with same matchId
-  static async onAuth(client: Client, options: any): Promise<boolean> {
-    // Always allow - authentication is handled by Supabase
-    return true;
-  }
-
-  // Use filterBy to match players by matchId
-  static async filterBy(options: any, roomId: string): Promise<boolean> {
-    // If matchId is provided, only allow joining rooms with same matchId
-    return true; // Default filter - let Colyseus handle matchmaking
-  }
 
   onJoin(client: Client, options: any) {
     // Check if this room's matchId matches the player's matchId
