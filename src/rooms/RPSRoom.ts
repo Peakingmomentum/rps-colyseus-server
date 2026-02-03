@@ -1,18 +1,3 @@
-/**
- * COLYSEUS SERVER-SIDE ROOM CODE
- * 
- * Copy this file to your Colyseus GitHub repository.
- * File location: src/rooms/RPSRoom.ts
- * 
- * CRITICAL: Field names MUST match exactly what the client expects!
- * The client uses: odisId, odisName (not odId, username)
- * 
- * Make sure to also register this room in your arena.config.ts:
- * 
- *   import { RPSRoom } from './rooms/RPSRoom';
- *   gameServer.define('rps_match', RPSRoom);
- */
-
 import { Room, Client } from '@colyseus/core';
 import { Schema, MapSchema, type } from '@colyseus/schema';
 
