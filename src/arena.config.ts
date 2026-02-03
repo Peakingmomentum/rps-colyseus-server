@@ -1,24 +1,19 @@
-import { Server } from "@colyseus/core";
-import { WebSocketTransport } from "@colyseus/ws-transport";
+import Arena from "@colyseus/arena";
 import { monitor } from "@colyseus/monitor";
-import express from "express";
 import { RPSRoom } from "./rooms/RPSRoom";
 
-const app = express();
-const port = Number(process.env.PORT) || 2567;
+export default Arena({
+    getId: () => "RPS Colyseus Server",
 
-const server = new Server({
-  transport: new WebSocketTransport({
-    server: app.listen(port)
-  })
+    initializeGameServer: (gameServer) => {
+        gameServer.define('rps_match', RPSRoom);
+    },
+
+    initializeExpress: (app) => {
+        app.use("/colyseus", monitor());
+    },
+
+    beforeListen: () => {
+        // Called before listen
+    }
 });
-
-server.define("rps_match", RPSRoom);
-
-app.use("/colyseus", monitor());
-
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
-});
-
-console.log(`RPS Game Server running on port ${port}`);
