@@ -1,4 +1,4 @@
-import Arena from "@colyseus/arena";
+import Arena from "@colyseus/tools";
 import { monitor } from "@colyseus/monitor";
 import { RPSRoom } from "./rooms/RPSRoom";
 
